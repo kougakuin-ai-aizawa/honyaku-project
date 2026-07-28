@@ -13,9 +13,7 @@
         
         <p id="status" class="text-sm text-slate-500 mb-6">下のボタンを押して喋ってね</p>
 
-        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 min-h-[100px] text-left text-lg text-slate-700 mb-6" id="result-box">
-            ここに喋った言葉が出ます...
-        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 min-h-[100px] text-left text-lg text-slate-700 mb-6 whitespace-pre-wrap break-words" id="result-box">ここに喋った言葉が出ます...</div>
 
         <button id="mic-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-full shadow-lg transition-all transform active:scale-95">
             🎙️ お話を始める
@@ -23,27 +21,30 @@
     </div>
 
     <script>
-        // ブラウザの音声認識を準備します（Web Speech API）
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         
         if (!SpeechRecognition) {
             alert("お使いのブラウザは音声認識に対応していません。ChromeやSafariで試してね！");
         } else {
             const recognition = new SpeechRecognition();
-            recognition.lang = 'ja-JP'; // 日本語を設定
-            recognition.interimResults = true; // 喋っている途中の文字も出す
-            recognition.continuous = true; // 喋り終わっても自動で終了しないようにする
+            recognition.lang = 'ja-JP';
+            recognition.interimResults = true; // 途中経過を表示
+            recognition.continuous = true;     // 連続認識
 
             const micBtn = document.getElementById('mic-btn');
             const resultBox = document.getElementById('result-box');
             const statusText = document.getElementById('status');
+            
             let isRecording = false;
+            let finalTranscript = ''; // 確定したテキストを保持する変数
 
             // ボタンを押したときの処理
             micBtn.addEventListener('click', () => {
                 if (!isRecording) {
+                    finalTranscript = ''; // 録音開始時に過去の文字をリセット
                     recognition.start();
                 } else {
+                    isRecording = false; // ユーザーが明示的に止めたフラグ
                     recognition.stop();
                 }
             });
@@ -53,27 +54,56 @@
                 isRecording = true;
                 statusText.innerText = "🎤 聞き取り中... 喋ってみてください！";
                 statusText.classList.add('text-red-500');
+                
                 micBtn.innerText = "🛑 止める";
-                micBtn.classList.replace('bg-blue-600', 'bg-red-600');
+                micBtn.className = "bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-6 rounded-full shadow-lg transition-all transform active:scale-95";
                 resultBox.innerText = "";
             };
 
-            // 喋っている最中・終わったとき
+            // 喋っている最中・文章が確定したとき
             recognition.onresult = (event) => {
-                let speechResult = "";
+                let interimTranscript = ''; // 認識途中の文字
+
                 for (let i = event.resultIndex; i < event.results.length; i++) {
-                    speechResult += event.results[i][0].transcript;
+                    const transcript = event.results[i][0].transcript;
+                    if (event.results[i].isFinal) {
+                        finalTranscript += transcript + '\n';
+                    } else {
+                        interimTranscript += transcript;
+                    }
                 }
-                resultBox.innerText = speechResult;
+
+                // 確定したテキスト ＋ 現在喋っている途中のテキストを表示
+                resultBox.innerText = finalTranscript + interimTranscript;
             };
 
-            // 録音終了時
+            // エラー発生時の処理
+            recognition.onerror = (event) => {
+                console.error("音声認識エラー:", event.error);
+                if (event.error === 'not-allowed') {
+                    alert("マイクの使用が許可されていません。ブラウザの設定を確認してください。");
+                }
+            };
+
+            // 録音終了時（無音による自動停止時も含む）
             recognition.onend = () => {
+                // ユーザーが停止ボタンを押していないのに自動停止した場合は再開する
+                if (isRecording) {
+                    try {
+                        recognition.start();
+                        return;
+                    } catch (e) {
+                        console.error("再開に失敗しました:", e);
+                    }
+                }
+
+                // 完全終了時のUI更新
                 isRecording = false;
                 statusText.innerText = "✅ 聞き取り完了！";
                 statusText.classList.remove('text-red-500');
+                
                 micBtn.innerText = "🎙️ お話を始める";
-                micBtn.classList.replace('bg-red-600', 'bg-blue-600');
+                micBtn.className = "bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-full shadow-lg transition-all transform active:scale-95";
             };
         }
     </script>
